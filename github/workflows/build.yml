@@ -40,15 +40,16 @@ jobs:
 
       - name: Download project
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 👇 GANTI: GITHUB_TOKEN → PAT_TOKEN
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
           RELEASE_URL: ${{ github.event.inputs.release_url }}
         run: |
           mkdir -p /tmp/build
           cd /tmp/build
-          curl -L -o project.zip -H "Authorization: token $GITHUB_TOKEN" "$RELEASE_URL"
+          # 👇 GANTI: GITHUB_TOKEN → PAT_TOKEN
+          curl -L -o project.zip -H "Authorization: token $PAT_TOKEN" "$RELEASE_URL"
           unzip -q project.zip -d project
           
-          # Cari pubspec.yaml
           PROJECT_ROOT=$(find project -name "pubspec.yaml" -type f -printf "%h\n" | head -1)
           echo "PROJECT_ROOT=$PROJECT_ROOT" >> $GITHUB_ENV
 
@@ -76,18 +77,21 @@ jobs:
       - name: Upload to Release
         if: always()
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 👇 GANTI: GITHUB_TOKEN → PAT_TOKEN
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
           TAG: ${{ github.event.inputs.tag }}
         run: |
           cd /tmp/output
-          RELEASE_ID=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+          # 👇 GANTI: GITHUB_TOKEN → PAT_TOKEN
+          RELEASE_ID=$(curl -s -H "Authorization: token $PAT_TOKEN" \
             "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG" \
             | jq -r '.id')
           
           if [ "$RELEASE_ID" != "null" ]; then
             for APK in *.apk; do
+              # 👇 GANTI: GITHUB_TOKEN → PAT_TOKEN
               curl -X POST \
-                -H "Authorization: token $GITHUB_TOKEN" \
+                -H "Authorization: token $PAT_TOKEN" \
                 -H "Content-Type: application/octet-stream" \
                 "https://uploads.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets?name=$APK" \
                 --data-binary "@$APK"
