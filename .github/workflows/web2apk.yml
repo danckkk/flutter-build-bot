@@ -42,14 +42,11 @@ jobs:
         run: |
           mkdir -p /tmp/output
           
-          # Buat project Flutter
           flutter create --org com.webview --project-name "$APP_NAME" /tmp/webapp
           cd /tmp/webapp
           
-          # Copy icon
           cp $GITHUB_WORKSPACE/icon.png assets/icon.png
           
-          # Update main.dart
           cat > lib/main.dart << 'EOF'
           import 'package:flutter/material.dart';
           import 'package:webview_flutter/webview_flutter.dart';
