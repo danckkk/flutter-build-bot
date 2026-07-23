@@ -4,22 +4,22 @@ on:
   workflow_dispatch:
     inputs:
       web_url:
-        description: 'Website URL'
+        description: 'URL Website'
         required: true
       app_name:
         description: 'Nama Aplikasi'
         required: true
       icon_url:
-        description: 'URL Icon (opsional)'
+        description: 'URL Icon (PNG)'
         required: false
-        default: 'https://via.placeholder.com/512.png'
+        default: 'https://via.placeholder.com/512/4A90E2/FFFFFF.png?text=APP'
 
 jobs:
-  build:
+  web2apk:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup Flutter
@@ -28,26 +28,74 @@ jobs:
           flutter-version: '3.24.3'
           channel: 'stable'
 
-      - name: Create Web to APK Project
+      - name: Create WebView Project
         run: |
-          flutter create --platforms web temp_webapp
-          cd temp_webapp
+          flutter create --platforms android webview_app
+          cd webview_app
 
-      - name: Build APK from Web URL
-        working-directory: ./temp_webapp
+      - name: Configure WebView
+        working-directory: ./webview_app
         run: |
-          echo '{
-            "name": "${{ inputs.app_name }}",
-            "short_name": "${{ inputs.app_name }}",
-            "start_url": "${{ inputs.web_url }}",
-            "display": "standalone"
-          }' > web/manifest.json
+          cat > lib/main.dart << 'EOF'
+          import 'package:flutter/material.dart';
+          import 'package:webview_flutter/webview_flutter.dart';
 
-          flutter build apk --release
+          void main() {
+            runApp(const MyApp());
+          }
+
+          class MyApp extends StatelessWidget {
+            const MyApp({super.key});
+
+            @override
+            Widget build(BuildContext context) {
+              return MaterialApp(
+                title: '${{ inputs.app_name }}',
+                debugShowCheckedModeBanner: false,
+                home: WebViewScreen(url: '${{ inputs.web_url }}'),
+              );
+            }
+          }
+
+          class WebViewScreen extends StatefulWidget {
+            final String url;
+            const WebViewScreen({super.key, required this.url});
+
+            @override
+            State<WebViewScreen> createState() => _WebViewScreenState();
+          }
+
+          class _WebViewScreenState extends State<WebViewScreen> {
+            late final WebViewController controller;
+
+            @override
+            void initState() {
+              super.initState();
+              controller = WebViewController()
+                ..setJavaScriptMode(JavaScriptMode.unrestricted)
+                ..loadRequest(Uri.parse(widget.url));
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(title: Text('${{ inputs.app_name }}')),
+                body: WebViewWidget(controller: controller),
+              );
+            }
+          }
+          EOF
+
+      - name: Build Release APK
+        working-directory: ./webview_app
+        run: flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: web2apk-result
-          path: temp_webapp/build/app/outputs/flutter-apk/app-release.apk
+          path: webview_app/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 7
+
+      - name: Show Result
+        run: echo "✅ Build Web2APK selesai. APK siap di-download di Artifacts."
