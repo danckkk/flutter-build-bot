@@ -1,14 +1,13 @@
-name: Flutter APK Builder
+name: Flutter Build APK
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Build tag'
+        description: 'Release Tag'
         required: true
-        type: string
       build_type:
-        description: 'Build type (release/debug)'
+        description: 'Build Type'
         required: true
         default: 'release'
         type: choice
@@ -16,79 +15,52 @@ on:
           - release
           - debug
       release_url:
-        description: 'GitHub Release URL'
+        description: 'Release URL (ZIP)'
         required: true
-        type: string
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    
+
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Download Project ZIP
+        run: |
+          curl -L -o project.zip "${{ inputs.release_url }}"
+
+      - name: Extract ZIP
+        run: |
+          mkdir -p flutter_project
+          unzip -q project.zip -d flutter_project
+          mv flutter_project/*/* flutter_project/ 2>/dev/null || true
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'
+          flutter-version: '3.24.3'   # Ubah sesuai kebutuhan
           channel: 'stable'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Download project from release
-        env:
-          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-          RELEASE_URL: ${{ github.event.inputs.release_url }}
+      - name: Install Dependencies
+        working-directory: ./flutter_project
         run: |
-          mkdir -p /tmp/build /tmp/output
-          cd /tmp/build
-          
-          curl -L -o project.zip -H "Authorization: token $PAT_TOKEN" "$RELEASE_URL"
-          unzip -q project.zip -d project
-          
-          PROJECT_ROOT=$(find project -name "pubspec.yaml" -type f -printf "%h\n" | head -1)
-          echo "PROJECT_ROOT=$PROJECT_ROOT" >> $GITHUB_ENV
-
-      - name: Build Flutter APK
-        run: |
-          cd $PROJECT_ROOT
           flutter pub get
-          
-          if [ "${{ github.event.inputs.build_type }}" == "debug" ]; then
-            flutter build apk --debug --split-per-abi
-          else
-            flutter build apk --release --split-per-abi
-          fi
-          
-          cp build/app/outputs/flutter-apk/*.apk /tmp/output/
 
-      - name: Upload APK Artifact
+      - name: Build APK (${{ inputs.build_type }})
+        working-directory: ./flutter_project
+        run: |
+          if [ "${{ inputs.build_type }}" = "debug" ]; then
+            flutter build apk --debug
+          else
+            flutter build apk --release
+          fi
+
+      - name: Upload APK as Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: flutter-apk
-          path: /tmp/output/*.apk
+          name: app-release
+          path: |
+            flutter_project/build/app/outputs/flutter-apk/app-release.apk
+            flutter_project/build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 7
-
-      - name: Upload APK to Release
-        if: always()
-        env:
-          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-          TAG: ${{ github.event.inputs.tag }}
-        run: |
-          cd /tmp/output
-          RELEASE_ID=$(curl -s -H "Authorization: token $PAT_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG" \
-            | jq -r '.id')
-          
-          if [ "$RELEASE_ID" != "null" ] && [ "$RELEASE_ID" != "" ]; then
-            for APK in *.apk; do
-              curl -X POST \
-                -H "Authorization: token $PAT_TOKEN" \
-                -H "Content-Type: application/octet-stream" \
-                "https://uploads.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets?name=$APK" \
-                --data-binary "@$APK"
-            done
-          fi
