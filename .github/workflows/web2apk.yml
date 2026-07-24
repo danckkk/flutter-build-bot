@@ -1,0 +1,52 @@
+name: Web to APK Converter
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Website URL'
+        required: true
+      app_name:
+        description: 'Nama Aplikasi'
+        required: true
+      package_name:
+        description: 'Package Name'
+        required: true
+        default: 'com.web2apk.app'
+      chat_id:
+        description: 'Telegram Chat ID'
+        required: true
+      bot_token:
+        description: 'Telegram Bot Token'
+        required: true
+
+jobs:
+  web2apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java & Flutter
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Build Web2APK
+        run: |
+          flutter pub get
+          flutter build apk --release --build-name=${{ inputs.app_name }} --build-number=1
+
+      - name: Send APK
+        run: |
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          curl -s -X POST "https://api.telegram.org/bot${{ inputs.bot_token }}/sendDocument" \
+            -F chat_id="${{ inputs.chat_id }}" \
+            -F document=@"$APK" \
+            -F caption="✅ <b>Web2APK Selesai!</b>%0A%0A🌐 URL: ${{ inputs.url }}%0A🏷️ App: ${{ inputs.app_name }}"
